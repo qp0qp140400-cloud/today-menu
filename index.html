@@ -46,6 +46,16 @@
     .detail-tip{padding:18px 20px;background:var(--pale);border-radius:12px;margin-top:24px}.detail-tip h3{margin:0 0 8px}
     .dialog-close{display:block;margin:26px auto 0;border:0;border-radius:30px;background:var(--green);color:white;padding:11px 40px}
     @media(max-width:440px){.dialog-content{padding:20px}.dialog-content h2{font-size:23px}.detail-photo{margin:15px 15px 0}.recipe-dialog{max-height:94dvh}}
+    .photo-zoom-toggle{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;cursor:zoom-in;z-index:1}
+    .photo-zoom-toggle:focus-visible{outline-offset:-5px}
+    .photo-zoom-hint{position:absolute;bottom:12px;right:12px;background:#243f32d9;color:#fff;padding:5px 11px;border-radius:20px;font-size:11px;pointer-events:none;z-index:1}
+    .detail-photo.failed .photo-zoom-toggle,.detail-photo.failed .photo-zoom-hint{display:none}
+    .image-viewer{width:96vw;height:94dvh;max-width:1400px;max-height:1100px;border:0;padding:0;border-radius:16px;background:#18271f;color:white;overflow:hidden}
+    .image-viewer::backdrop{background:#0c1711e8}
+    .image-viewer-button{display:block;width:100%;height:100%;border:0;background:transparent;color:white;cursor:zoom-out;padding:44px 14px 48px}
+    .image-viewer-button img{width:100%;height:100%;object-fit:contain;display:block}
+    .image-viewer-hint{position:absolute;left:12px;right:12px;bottom:14px;pointer-events:none;text-align:center;font-size:13px}
+    .image-viewer-close{position:absolute;top:10px;right:12px;background:#fff;color:var(--ink);z-index:1}
   </style>
 </head>
 <body>
@@ -70,7 +80,7 @@
   </div>
   <dialog id="recipe-dialog" class="recipe-dialog" aria-labelledby="detail-title">
     <div class="dialog-toolbar"><span>오늘의 제철 레시피</span><button type="button" id="dialog-x" class="dialog-x" aria-label="레시피 팝업 닫기" autofocus>×</button></div>
-    <div id="detail-photo" class="photo detail-photo"><img id="detail-image" alt="" decoding="async" referrerpolicy="no-referrer"><div class="fallback"><p>사진을 불러오지 못했어요</p><button type="button" id="detail-image-retry" class="image-retry">사진 다시 불러오기</button></div></div>
+    <div id="detail-photo" class="photo detail-photo"><img id="detail-image" alt="" decoding="async" referrerpolicy="no-referrer"><button type="button" id="photo-zoom-toggle" class="photo-zoom-toggle" aria-label="사진 크게 보기" aria-haspopup="dialog" aria-controls="image-viewer"></button><span class="photo-zoom-hint">사진을 누르면 크게 볼 수 있어요 ⤢</span><div class="fallback"><p>사진을 불러오지 못했어요</p><button type="button" id="detail-image-retry" class="image-retry">사진 다시 불러오기</button></div></div>
     <div class="dialog-content">
       <h2 id="detail-title"></h2>
       <dl class="detail-meta"><div><dt>요리종류</dt><dd id="detail-category"></dd></div><div><dt>조리방법</dt><dd id="detail-method"></dd></div></dl>
@@ -79,6 +89,10 @@
       <aside id="detail-tip" class="detail-tip" hidden><h3>💡 요리 팁</h3><p id="detail-tip-text"></p></aside>
       <button type="button" id="dialog-close" class="dialog-close">닫기</button>
     </div>
+  </dialog>
+  <dialog id="image-viewer" class="image-viewer" aria-label="레시피 사진 확대 보기">
+    <button type="button" id="image-viewer-close" class="dialog-x image-viewer-close" aria-label="확대 사진 닫기">×</button>
+    <button type="button" id="image-viewer-button" class="image-viewer-button" aria-label="사진을 원래 크기로 되돌리기"><img id="zoom-image" alt="" referrerpolicy="no-referrer"><span class="image-viewer-hint">사진을 다시 누르면 원래 화면으로 돌아가요 · Esc로 닫기</span></button>
   </dialog>
   <script>
     'use strict';
@@ -94,6 +108,17 @@
     const recipeDialog = document.querySelector('#recipe-dialog');
     const detailImage = document.querySelector('#detail-image');
     const detailPhoto = document.querySelector('#detail-photo');
+    const imageViewer = document.querySelector('#image-viewer');
+    const zoomImage = document.querySelector('#zoom-image');
+    document.querySelector('#photo-zoom-toggle').addEventListener('click', () => {
+      if (!activeImageUrl || detailPhoto.classList.contains('failed')) return;
+      zoomImage.alt = detailImage.alt;
+      zoomImage.src = detailImage.currentSrc || detailImage.src;
+      if (!imageViewer.open) imageViewer.showModal();
+    });
+    document.querySelector('#image-viewer-button').addEventListener('click', () => imageViewer.close());
+    document.querySelector('#image-viewer-close').addEventListener('click', () => imageViewer.close());
+    imageViewer.addEventListener('close', () => zoomImage.removeAttribute('src'));
     let activeImageUrl = null;
     function recipeImageUrl(recipe) {
       const source = Number(recipe.id) === 745 && recipe.image === 'https://www.foodsafetykorea.go.kr/'
@@ -140,7 +165,10 @@
     }
     document.querySelector('#dialog-x').addEventListener('click', () => recipeDialog.close());
     document.querySelector('#dialog-close').addEventListener('click', () => recipeDialog.close());
-    recipeDialog.addEventListener('close', () => document.body.classList.remove('modal-open'));
+    recipeDialog.addEventListener('close', () => {
+      if (imageViewer.open) imageViewer.close();
+      document.body.classList.remove('modal-open');
+    });
     detailImage.addEventListener('load', () => detailPhoto.classList.remove('failed'));
     detailImage.addEventListener('error', () => detailPhoto.classList.add('failed'));
     document.querySelector('#detail-image-retry').addEventListener('click', () => {
