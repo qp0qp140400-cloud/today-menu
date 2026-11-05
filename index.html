@@ -56,6 +56,17 @@
     .image-viewer-button img{width:100%;height:100%;object-fit:contain;display:block}
     .image-viewer-hint{position:absolute;left:12px;right:12px;bottom:14px;pointer-events:none;text-align:center;font-size:13px}
     .image-viewer-close{position:absolute;top:10px;right:12px;background:#fff;color:var(--ink);z-index:1}
+    .diet-filters{border:0;padding:0;margin:0 0 20px;display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+    .diet-filters legend{font-size:13px;font-weight:700;margin-bottom:10px}
+    .diet-option{position:relative;cursor:pointer}.diet-option input{position:absolute;opacity:0;width:1px;height:1px}
+    .diet-option span{display:block;padding:8px 17px;border:1px solid var(--line);border-radius:24px;background:#fffef9;font-size:13px;color:#64715a}
+    .diet-option input:checked+span{background:var(--green);border-color:var(--green);color:white}
+    .diet-option input:focus-visible+span{outline:3px solid #a07837;outline-offset:3px}
+    .diet-note{margin:0 0 20px;font-size:12px;color:#6f775f;line-height:1.8}
+    .ingredient{flex-wrap:wrap;justify-content:center;gap:4px 9px}.ingredient-name{font-weight:700}
+    .ingredient-label{font-size:10px;opacity:.85;display:block;flex-basis:100%;line-height:1.3}
+    .diet-badges{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}.diet-badge{font-size:10px;font-weight:700;border-radius:5px;padding:3px 8px;background:#e7efdc;color:#496636}.diet-badge.organic{background:#f1ebd8;color:#80662c}
+    .detail-diet-note{border:1px solid var(--line);background:#f0f2e7;padding:14px 16px;border-radius:10px;margin:0 0 22px;font-size:13px;line-height:1.9;white-space:pre-line}
   </style>
 </head>
 <body>
@@ -66,6 +77,13 @@
         <div class="hero-copy"><p class="eyebrow">MONTHLY SEASONAL TABLE</p><h1 id="hero-title">오늘의 고민,<br><em>제철 한 끼</em>로 가볍게.</h1><p class="intro">계절이 건네는 재료로, 오늘의 식탁을 골라보세요.</p></div>
         <div class="month-control"><label for="month">어느 달의 식탁을 만나볼까요?</label><div class="select-wrap"><select id="month" aria-label="제철 재료를 확인할 월"></select></div></div>
       </section>
+      <fieldset class="diet-filters" id="diet-filters" aria-describedby="diet-note">
+        <legend>어떤 재료로 차릴까요?</legend>
+        <label class="diet-option"><input type="radio" name="diet" value="all" checked><span>전체</span></label>
+        <label class="diet-option"><input type="radio" name="diet" value="vegan"><span>🌱 비건 재료</span></label>
+        <label class="diet-option"><input type="radio" name="diet" value="organic"><span>🌿 유기농 장보기</span></label>
+      </fieldset>
+      <p class="diet-note" id="diet-note" role="status">재료의 식물성 여부와 비건 재료 구성을 확인할 수 있어요. 유기농은 인증 정보가 없어 구매 안내로 제공해요.</p>
       <section class="ingredients-panel" aria-labelledby="ingredients-title" aria-busy="true" id="ingredients-panel">
         <div class="section-label"><span class="step">01</span><h2 id="ingredients-title">이달의 제철 재료</h2><span class="hint">먹고 싶은 재료를 하나 골라주세요</span></div>
         <div class="ingredients" id="ingredients"><span class="intro">제철 재료를 불러오는 중이에요…</span></div>
@@ -83,6 +101,8 @@
     <div id="detail-photo" class="photo detail-photo"><img id="detail-image" alt="" decoding="async" referrerpolicy="no-referrer"><button type="button" id="photo-zoom-toggle" class="photo-zoom-toggle" aria-label="사진 크게 보기" aria-haspopup="dialog" aria-controls="image-viewer"></button><span class="photo-zoom-hint">사진을 누르면 크게 볼 수 있어요 ⤢</span><div class="fallback"><p>사진을 불러오지 못했어요</p><button type="button" id="detail-image-retry" class="image-retry">사진 다시 불러오기</button></div></div>
     <div class="dialog-content">
       <h2 id="detail-title"></h2>
+      <div id="detail-diet-badges" class="diet-badges"></div>
+      <p id="detail-diet-note" class="detail-diet-note" hidden></p>
       <dl class="detail-meta"><div><dt>요리종류</dt><dd id="detail-category"></dd></div><div><dt>조리방법</dt><dd id="detail-method"></dd></div></dl>
       <h3>재료</h3><p id="detail-ingredients" class="detail-ingredients"></p>
       <h3>조리순서</h3><ol id="detail-steps" class="detail-steps"></ol><p id="detail-no-steps" hidden>등록된 조리순서가 없어요.</p>
@@ -105,6 +125,46 @@
     const menuFile = document.querySelector('#menu-file');
     let data = { seasonal: [], recipes: [] };
     let selectedIngredient = null;
+    let selectedDiet = 'all';
+    // Only explicitly reviewed ingredient names and recipe content receive plant-based labels.
+    const PLANT_INGREDIENTS = new Set(["찹쌀","고사리","깻잎","대두","딸기","봄동","시래기","우엉","냉이","두부","방울토마토","양배추","달래","미나리","쑥","귀리","두릅","마늘","상추","오이","죽순","토마토","가지","감자","곤드레","양파","도라지","보리","보리쌀","수박","애호박","열무","자두","참외","고구마순","고추","단호박","복숭아","옥수수","참나물","포도","무화과","수수","콩나물","팽이버섯","표고버섯","현미","검은콩","배","생강","연근","호박","대추","메밀","무","배추","사과","쌀","유자","잣","고구마","밤","브로콜리","석류","시금치"]);
+    const VEGAN_RECIPE_REVIEWS = {"29":"b06ed82a","32":"340f6db1","37":"cb16714f","77":"8c6141ba","93":"ad6387a8","95":"df4c22e3","96":"7b2ee851","111":"d086b02","144":"3f40b17d","150":"2c1a52f1","162":"5dde2159","202":"c367b8d0","218":"91190cb2","232":"bb42ed44","235":"46f661dc","303":"edb49236","337":"b14e666b","338":"6a2f292a","364":"fa4c0646","388":"15c5480f","415":"d55b3745","419":"936bca5b","422":"fa4fae22","572":"1850c3cb","644":"8d946109","646":"65be6154","650":"2e05c2d0","658":"78e0b5b7","665":"793043e9","671":"5e72503","685":"17f93460","695":"795e8208","696":"eecf922f","705":"5bbd5a9d","768":"7843167f","772":"6bf6328b","814":"5f945c0b","900":"68b4d07c","903":"b65e28e1","952":"b1e24e99","1087":"130b8079","1137":"97012b3e","2953":"d917f8f0","2974":"41b6831b","2989":"78a17efa","3093":"5323d119","3099":"bc7488c6","3166":"81c149ca","3175":"53737a82","3569":"8f75d764"};
+    function reviewSignature(recipe) {
+      const text = JSON.stringify([recipe.name, recipe.ingredients_text, recipe.steps]);
+      let hash = 2166136261;
+      for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+      return (hash >>> 0).toString(16);
+    }
+    function isVeganRecipe(recipe) {
+      return VEGAN_RECIPE_REVIEWS[recipe.id] === reviewSignature(recipe);
+    }
+    function organicShoppingIngredients(recipe) {
+      return [...new Set(recipe.seasonal.filter(name => PLANT_INGREDIENTS.has(name)))];
+    }
+    function createDietBadges(recipe) {
+      const badges = document.createElement('div');
+      badges.className = 'diet-badges';
+      if (isVeganRecipe(recipe)) {
+        const badge = document.createElement('span');
+        badge.className = 'diet-badge';
+        badge.textContent = '🌱 비건 재료 구성';
+        badges.append(badge);
+      }
+      if (selectedDiet === 'organic' && organicShoppingIngredients(recipe).length) {
+        const badge = document.createElement('span');
+        badge.className = 'diet-badge organic';
+        badge.textContent = '🌿 유기농 구매 안내';
+        badges.append(badge);
+      }
+      return badges;
+    }
+    function updateDietNote() {
+      document.querySelector('#diet-note').textContent = selectedDiet === 'vegan'
+        ? '식물성 제철 재료와 검토한 비건 재료 구성의 레시피만 보여드려요. 소스·가공식품은 비건 제품을 선택하세요. 제품 인증을 뜻하지는 않아요.'
+        : selectedDiet === 'organic'
+          ? '유기농으로 구매할 식물성 제철 재료를 모았어요. 현재 데이터에는 인증 정보가 없으므로 유기농 인증 제품 여부는 구매할 때 확인해주세요. 레시피는 비건 여부와 별개예요.'
+          : '재료의 식물성 여부와 비건 재료 구성을 확인할 수 있어요. 유기농은 인증 정보가 없어 구매 안내로 제공해요.';
+    }
     const recipeDialog = document.querySelector('#recipe-dialog');
     const detailImage = document.querySelector('#detail-image');
     const detailPhoto = document.querySelector('#detail-photo');
@@ -134,6 +194,17 @@
       document.querySelector('#detail-title').textContent = recipe.name;
       document.querySelector('#detail-category').textContent = recipe.category || '기타';
       document.querySelector('#detail-method').textContent = recipe.method || '등록된 정보가 없어요';
+      const detailBadges = document.querySelector('#detail-diet-badges');
+      detailBadges.replaceChildren(...createDietBadges(recipe).children);
+      const dietNote = document.querySelector('#detail-diet-note');
+      const notes = [];
+      if (isVeganRecipe(recipe)) notes.push('🌱 비건 재료 구성: 표기된 재료와 조리순서를 검토했어요. 소스·가공식품은 비건 제품을 선택해주세요.');
+      if (selectedDiet === 'organic') {
+        notes.push(`🌿 유기농으로 구매할 제철 재료: ${organicShoppingIngredients(recipe).join(', ') || '등록된 재료가 없어요'}`);
+        notes.push('재료를 유기농 제품으로 선택하는 장보기 안내예요. 이 레시피나 재료의 유기농 인증이 확인된 것은 아니에요.');
+      }
+      dietNote.textContent = notes.join('\n');
+      dietNote.hidden = !notes.length;
       document.querySelector('#detail-ingredients').textContent = plainText(recipe.ingredients_text) || '등록된 재료 정보가 없어요.';
       const steps = document.querySelector('#detail-steps');
       steps.replaceChildren();
@@ -187,29 +258,36 @@
     monthSelect.value = new Date().getMonth() + 1;
     function matchingRecipes(name) {
       const month = Number(monthSelect.value);
-      return data.recipes.filter(recipe => recipe.seasonal.includes(name) && recipe.months.includes(month));
+      return data.recipes.filter(recipe => recipe.seasonal.includes(name) && recipe.months.includes(month) && (selectedDiet !== 'vegan' || isVeganRecipe(recipe)));
     }
     function showStatus(title, description) {
       statusBox.hidden = false;
       document.querySelector('#status-title').textContent = title;
       document.querySelector('#status-description').textContent = description;
     }
-    function renderIngredients() {
+    function renderIngredients(preserveSelection = false) {
       const month = Number(monthSelect.value);
-      const names = [...new Set(data.seasonal.filter(item => item.month === month).map(item => item.name))];
-      selectedIngredient = null;
+      const names = [...new Set(data.seasonal.filter(item => item.month === month && (selectedDiet === 'all' || PLANT_INGREDIENTS.has(item.name))).map(item => item.name))];
+      if (!preserveSelection || !names.includes(selectedIngredient)) selectedIngredient = null;
       ingredients.replaceChildren();
       document.querySelector('#ingredients-title').textContent = `${month}월의 제철 재료`;
       for (const name of names) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'ingredient';
-        button.setAttribute('aria-pressed', 'false');
-        button.append(document.createTextNode(name));
+        button.setAttribute('aria-pressed', String(name === selectedIngredient));
+        const ingredientName = document.createElement('span');
+        ingredientName.className = 'ingredient-name';
+        ingredientName.textContent = name;
+        button.append(ingredientName);
         const count = document.createElement('span');
         count.className = 'count';
         count.textContent = matchingRecipes(name).length;
         button.append(count);
+        const label = document.createElement('span');
+        label.className = 'ingredient-label';
+        label.textContent = PLANT_INGREDIENTS.has(name) ? (selectedDiet === 'organic' ? '유기농으로 구매' : '🌱 비건 재료') : '동물성 재료';
+        button.append(label);
         button.addEventListener('click', () => {
           selectedIngredient = name;
           for (const other of ingredients.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
@@ -239,7 +317,7 @@
       counter.textContent = `${monthSelect.value}월 · 총 ${matches.length}개의 메뉴`;
       statusBox.hidden = matches.length > 0;
       if (!matches.length) {
-        showStatus('아직 등록된 메뉴가 없어요', '선택한 월과 재료에 맞는 레시피가 없어요. 다른 재료를 골라보세요.');
+        showStatus('아직 등록된 메뉴가 없어요', selectedDiet === 'vegan' ? '이달의 선택한 재료로 검토된 비건 레시피가 없어요. 다른 재료나 월을 골라보세요.' : '선택한 월과 재료에 맞는 레시피가 없어요. 다른 재료를 골라보세요.');
         return;
       }
       for (const recipe of matches) {
@@ -309,6 +387,8 @@
         const detailHint = document.createElement('div');
         detailHint.className = 'detail-hint';
         detailHint.textContent = '레시피 자세히 보기 ↗';
+        const dietBadges = createDietBadges(recipe);
+        if (dietBadges.children.length) body.append(dietBadges);
         body.append(category, name, meta, detailHint);
         card.append(photo, body);
         recipes.append(card);
@@ -346,6 +426,12 @@
     }
     monthSelect.addEventListener('change', () => {
       if (data.seasonal.length) renderIngredients();
+    });
+    document.querySelector('#diet-filters').addEventListener('change', event => {
+      if (event.target.name !== 'diet') return;
+      selectedDiet = event.target.value;
+      updateDietNote();
+      if (data.seasonal.length) renderIngredients(true);
     });
     retry.addEventListener('click', () => loadData());
     chooseFile.addEventListener('click', () => menuFile.click());
