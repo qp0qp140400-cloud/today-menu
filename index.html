@@ -23,6 +23,29 @@
     .photo .fallback{position:relative;z-index:1;padding:18px}
     .photo .fallback p{margin:0 0 10px;font-size:13px}
     .image-retry{border:1px solid #a9b598;border-radius:20px;background:#fffef9;color:var(--ink);padding:7px 14px;font-size:12px}
+    body.modal-open{overflow:hidden}
+    .card{position:relative}
+    .recipe-open{border:0;background:transparent;padding:0;text-align:left;color:inherit;display:block;width:100%;font:inherit}
+    .recipe-open:after{content:'';position:absolute;inset:0;z-index:1;border-radius:13px}
+    .recipe-open:focus-visible{outline:none}
+    .recipe-open:focus-visible:after{outline:3px solid #a07837;outline-offset:3px}
+    .image-retry{position:relative;z-index:2}
+    .detail-hint{font-size:11px;color:#728452;margin-top:9px}
+    .recipe-dialog{width:min(760px,calc(100% - 32px));max-height:90dvh;padding:0;border:1px solid var(--line);border-radius:20px;color:var(--ink);background:var(--paper);overflow:auto;overscroll-behavior:contain}
+    .recipe-dialog::backdrop{background:#14261fba;backdrop-filter:blur(4px)}
+    .dialog-toolbar{display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:3;padding:13px 20px;background:#f8f7f2f5;border-bottom:1px solid var(--line)}
+    .dialog-toolbar span{font-size:12px;color:var(--muted);letter-spacing:1px}
+    .dialog-x{border:1px solid var(--line);border-radius:50%;width:36px;height:36px;background:#fffef9;color:var(--ink);font-size:25px;line-height:1}
+    .detail-photo{margin:20px 28px 0;border-radius:12px;aspect-ratio:4/3;max-height:400px}
+    .dialog-content{padding:24px 32px 30px}
+    .dialog-content h2{font-size:28px;line-height:1.4;letter-spacing:-1px;margin:0 0 14px;overflow-wrap:anywhere}
+    .detail-meta{display:flex;flex-wrap:wrap;gap:10px 24px;margin:0 0 24px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+    .detail-meta div{display:flex;gap:10px;font-size:13px}.detail-meta dt{color:var(--muted)}.detail-meta dd{margin:0;font-weight:700}
+    .dialog-content h3{font-size:17px;margin:24px 0 10px}.detail-ingredients,.detail-tip p{white-space:pre-line;overflow-wrap:anywhere;font-size:14px;margin:0;line-height:1.9}
+    .detail-steps{padding-left:25px;margin:0;font-size:14px;line-height:1.9}.detail-steps li{padding:4px 0 9px 7px;white-space:pre-line;overflow-wrap:anywhere}.detail-steps li::marker{color:#6e8055;font-weight:700}
+    .detail-tip{padding:18px 20px;background:var(--pale);border-radius:12px;margin-top:24px}.detail-tip h3{margin:0 0 8px}
+    .dialog-close{display:block;margin:26px auto 0;border:0;border-radius:30px;background:var(--green);color:white;padding:11px 40px}
+    @media(max-width:440px){.dialog-content{padding:20px}.dialog-content h2{font-size:23px}.detail-photo{margin:15px 15px 0}.recipe-dialog{max-height:94dvh}}
   </style>
 </head>
 <body>
@@ -45,6 +68,18 @@
     </main>
     <footer class="footer"><span>오늘 뭐먹지? · 계절을 담은 소박한 식탁</span><span>레시피·사진 출처 <a href="https://www.foodsafetykorea.go.kr" target="_blank" rel="noopener noreferrer">식품안전나라 ↗</a></span></footer>
   </div>
+  <dialog id="recipe-dialog" class="recipe-dialog" aria-labelledby="detail-title">
+    <div class="dialog-toolbar"><span>오늘의 제철 레시피</span><button type="button" id="dialog-x" class="dialog-x" aria-label="레시피 팝업 닫기" autofocus>×</button></div>
+    <div id="detail-photo" class="photo detail-photo"><img id="detail-image" alt="" decoding="async" referrerpolicy="no-referrer"><div class="fallback"><p>사진을 불러오지 못했어요</p><button type="button" id="detail-image-retry" class="image-retry">사진 다시 불러오기</button></div></div>
+    <div class="dialog-content">
+      <h2 id="detail-title"></h2>
+      <dl class="detail-meta"><div><dt>요리종류</dt><dd id="detail-category"></dd></div><div><dt>조리방법</dt><dd id="detail-method"></dd></div></dl>
+      <h3>재료</h3><p id="detail-ingredients" class="detail-ingredients"></p>
+      <h3>조리순서</h3><ol id="detail-steps" class="detail-steps"></ol><p id="detail-no-steps" hidden>등록된 조리순서가 없어요.</p>
+      <aside id="detail-tip" class="detail-tip" hidden><h3>💡 요리 팁</h3><p id="detail-tip-text"></p></aside>
+      <button type="button" id="dialog-close" class="dialog-close">닫기</button>
+    </div>
+  </dialog>
   <script>
     'use strict';
     const monthSelect = document.querySelector('#month');
@@ -56,6 +91,65 @@
     const menuFile = document.querySelector('#menu-file');
     let data = { seasonal: [], recipes: [] };
     let selectedIngredient = null;
+    const recipeDialog = document.querySelector('#recipe-dialog');
+    const detailImage = document.querySelector('#detail-image');
+    const detailPhoto = document.querySelector('#detail-photo');
+    let activeImageUrl = null;
+    function recipeImageUrl(recipe) {
+      const source = Number(recipe.id) === 745 && recipe.image === 'https://www.foodsafetykorea.go.kr/'
+        ? 'https://www.foodsafetykorea.go.kr/uploadimg/cook/745-6.jpg' : recipe.image;
+      const url = new URL(source);
+      if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Invalid image URL');
+      return url.href;
+    }
+    function plainText(value) {
+      return String(value ?? '').replace(/<br\s*\/?\s*>/gi, '\n').replace(/<[^>]*>/g, '').trim();
+    }
+    function openRecipe(recipe) {
+      document.querySelector('#detail-title').textContent = recipe.name;
+      document.querySelector('#detail-category').textContent = recipe.category || '기타';
+      document.querySelector('#detail-method').textContent = recipe.method || '등록된 정보가 없어요';
+      document.querySelector('#detail-ingredients').textContent = plainText(recipe.ingredients_text) || '등록된 재료 정보가 없어요.';
+      const steps = document.querySelector('#detail-steps');
+      steps.replaceChildren();
+      for (const step of Array.isArray(recipe.steps) ? recipe.steps : []) {
+        const text = plainText(step);
+        if (!text) continue;
+        const item = document.createElement('li');
+        item.textContent = text;
+        steps.append(item);
+      }
+      document.querySelector('#detail-no-steps').hidden = steps.children.length > 0;
+      const tip = plainText(recipe.tip);
+      document.querySelector('#detail-tip').hidden = !tip;
+      document.querySelector('#detail-tip-text').textContent = tip;
+      detailPhoto.classList.remove('failed');
+      detailImage.alt = recipe.name;
+      activeImageUrl = null;
+      try {
+        activeImageUrl = recipeImageUrl(recipe);
+        detailImage.src = activeImageUrl;
+      } catch {
+        detailImage.removeAttribute('src');
+        detailPhoto.classList.add('failed');
+      }
+      document.querySelector('#detail-image-retry').hidden = !activeImageUrl;
+      if (!recipeDialog.open) recipeDialog.showModal();
+      recipeDialog.scrollTop = 0;
+      document.body.classList.add('modal-open');
+    }
+    document.querySelector('#dialog-x').addEventListener('click', () => recipeDialog.close());
+    document.querySelector('#dialog-close').addEventListener('click', () => recipeDialog.close());
+    recipeDialog.addEventListener('close', () => document.body.classList.remove('modal-open'));
+    detailImage.addEventListener('load', () => detailPhoto.classList.remove('failed'));
+    detailImage.addEventListener('error', () => detailPhoto.classList.add('failed'));
+    document.querySelector('#detail-image-retry').addEventListener('click', () => {
+      if (!activeImageUrl) return;
+      const url = new URL(activeImageUrl);
+      url.searchParams.set('_retry', Date.now());
+      detailPhoto.classList.remove('failed');
+      detailImage.src = url.href;
+    });
     for (let month = 1; month <= 12; month++) {
       const option = document.createElement('option');
       option.value = month;
@@ -151,12 +245,7 @@
           image.src = url.href;
         });
         try {
-          // This recipe's supplied URL points to the home page. Use its final cooking-step photo.
-          const source = Number(recipe.id) === 745 && recipe.image === 'https://www.foodsafetykorea.go.kr/'
-            ? 'https://www.foodsafetykorea.go.kr/uploadimg/cook/745-6.jpg' : recipe.image;
-          const url = new URL(source);
-          if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Invalid image URL');
-          imageUrl = url.href;
+          imageUrl = recipeImageUrl(recipe);
           image.src = imageUrl;
         } catch {
           photo.classList.add('failed');
@@ -173,7 +262,15 @@
         category.className = 'category';
         category.textContent = recipe.category || '기타';
         const name = document.createElement('h3');
-        name.textContent = recipe.name;
+        const openButton = document.createElement('button');
+        openButton.type = 'button';
+        openButton.className = 'recipe-open';
+        openButton.textContent = recipe.name;
+        openButton.setAttribute('aria-haspopup', 'dialog');
+        openButton.setAttribute('aria-controls', 'recipe-dialog');
+        openButton.setAttribute('aria-label', `${recipe.name} 레시피 자세히 보기`);
+        openButton.addEventListener('click', () => openRecipe(recipe));
+        name.append(openButton);
         const meta = document.createElement('div');
         meta.className = 'card-meta';
         const ingredient = document.createElement('span');
@@ -181,7 +278,10 @@
         const method = document.createElement('span');
         method.textContent = recipe.method || '';
         meta.append(ingredient, method);
-        body.append(category, name, meta);
+        const detailHint = document.createElement('div');
+        detailHint.className = 'detail-hint';
+        detailHint.textContent = '레시피 자세히 보기 ↗';
+        body.append(category, name, meta, detailHint);
         card.append(photo, body);
         recipes.append(card);
       }
